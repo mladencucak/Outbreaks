@@ -85,8 +85,8 @@ ggplot(cdfdt) +
   facet_wrap(~ yr, ncol = 3)+
   labs(y = "Cumulative sum of outbreaks",
        x = "Date") +
-  theme_article()
-ggsave(here::here("out", "fig", "Cumsum of outbreaks per year.png"),
+  theme_article()+
+ggsave(here::here("out", "Cumsum of outbreaks per year.png"),
        width = 6,
        height = 4.5,
        dpi = 620)
@@ -96,11 +96,11 @@ ggsave(here::here("out", "fig", "Cumsum of outbreaks per year.png"),
 library(nlme)
 
 
-start.vals <- c(ult = 1, omega = 1.4, theta = 45)
+start.vals <- c(ult = 5000, omega = 1.4, theta = 45)
 cdf.fun <- 
   function( jday,ult, omega, theta ){  ult*(1 - exp(-(jday/theta)^omega))}
 
-cdf.fun(cdfdt$jday, 1, 1.4, 45)
+cdf.fun(cdfdt$jday, 200, .1, 1)
 
 
 w1 <- 
@@ -110,18 +110,4 @@ w1 <-
        # weights = varPower(fixed=.5),
        data=cdfdt,
        start = start.vals)
-
-
-
-# library("optimx")
-fit <- bbmle::mle2(cums ~ dnorm(mean = beta/eta * ((wet_dur - 3)/eta)^(beta - 1) *exp(((wet_dur - 3)/eta)^beta),
-                                sd = sigma),
-                   parameters = list(beta ~ temp * inoculum_dose,
-                                     eta ~ temp * inoculum_dose),
-                   start = list(beta = .001, eta = 1, sigma = 1), ## you have to be very careful about starting values
-                   optimizer = "nlm", ## you can also play with different optimizers; or use contrained optimization or a reparameterization (e.g. for eta > 0)
-                   data = dis_df)
-
-
-
 
