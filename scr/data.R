@@ -97,17 +97,55 @@ library(nlme)
 
 
 start.vals <- c(ult = 5000, omega = 1.4, theta = 45)
-cdf.fun <- 
-  function( jday,ult, omega, theta ){  ult*(1 - exp(-(jday/theta)^omega))}
+cdf.fun <- function(jday, ult, omega, theta) {
+  ult*(1 - exp(-(jday/theta)^omega))
+}
 
-cdf.fun(cdfdt$jday, 200, .1, 1)
+curve(cdf.fun(jday = x, ult = 5000, omega = 1.4, theta = 45),
+      xlim = c(160, 280))
 
+nlsList(cums ~ cdf.fun(jday, ult, omega, theta) | yr,
+        start = start.vals,
+        data = cdfdt)
 
 w1 <- 
-  nlme(cums ~ cdf.fun(jday,ult, omega, theta),
-       fixed = list(ult~1, omega~1, theta ~ 1),
+  nlme(cums ~ cdf.fun(jday, ult, omega, theta),
+       fixed = list(ult ~ 1,
+                    omega ~ 1,
+                    theta ~ 1),
        random = ult ~ 1 | yr,
        # weights = varPower(fixed=.5),
-       data=cdfdt,
+       data = cdfdt,
        start = start.vals)
 
+
+start_vals <- cdfdt %>%
+  filter(yr != "8") %>%
+  nlsList(cums ~ SSlogis(jday, Asym, xmid, scal) | yr,
+          data = .)
+
+start_vals %>%
+  intervals %>%
+  plot
+
+w1 <- cdfdt %>%
+  filter(yr != "8") %>%
+  nlme(cums ~ SSlogis(jday, Asym, xmid, scal),
+       fixed = list(Asym ~ 1,
+                    xmid ~ 1,
+                    scal ~ 1),
+       random = Asym + xmid ~ 1 | yr,
+       data = .,
+       start = fixef(start_vals))
+
+cdfdt_pred <- cdfdt %>%
+  filter(yr != "8") %>%
+  mutate(pred = predict(w1))
+
+ggplot(cdfdt_pred) +
+  geom_line(aes(jday, cums))+
+  facet_wrap(~ yr, ncol = 3)+
+  labs(y = "Cumulative sum of outbreaks",
+       x = "Date") +
+  theme_article() +
+  geom_line(aes(jday, pred), col = 2)
