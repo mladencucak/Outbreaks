@@ -128,7 +128,8 @@ start_vals %>%
   intervals %>%
   plot
 
-w1 <- cdfdt %>%
+w1 <- 
+  cdfdt %>%
   filter(yr != "8") %>%
   nlme(cums ~ SSlogis(jday, Asym, xmid, scal),
        fixed = list(Asym ~ 1,
@@ -149,3 +150,6 @@ ggplot(cdfdt_pred) +
        x = "Date") +
   theme_article() +
   geom_line(aes(jday, pred), col = 2)
+
+
+
