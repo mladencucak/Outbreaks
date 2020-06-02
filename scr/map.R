@@ -1,4 +1,5 @@
 
+
 ni_sf <-
 all_counties.sf[all_counties.sf$CountyName  == c("Tyrone","Antrim","Armagh", "Fermanagh","Londonderry","Down"),]
 basemap <- 

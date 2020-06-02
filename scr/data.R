@@ -119,7 +119,9 @@ w1 <-
        start = start.vals)
 
 
-start_vals <- cdfdt %>%
+
+start_vals <- 
+  cdfdt %>%
   filter(yr != "8") %>%
   nlsList(cums ~ SSlogis(jday, Asym, xmid, scal) | yr,
           data = .)
@@ -130,17 +132,20 @@ start_vals %>%
 
 w1 <- 
   cdfdt %>%
-  filter(yr != "8") %>%
+  # filter(yr != "8") %>%
   nlme(cums ~ SSlogis(jday, Asym, xmid, scal),
        fixed = list(Asym ~ 1,
                     xmid ~ 1,
                     scal ~ 1),
-       random = Asym + xmid ~ 1 | yr,
+       random = Asym + xmid  ~ 1 | yr,
        data = .,
        start = fixef(start_vals))
 
-cdfdt_pred <- cdfdt %>%
-  filter(yr != "8") %>%
+pairs(w1)
+
+cdfdt_pred <- 
+  cdfdt %>%
+  # filter(yr != "8") %>%
   mutate(pred = predict(w1))
 
 ggplot(cdfdt_pred) +
