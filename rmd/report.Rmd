@@ -219,7 +219,7 @@ Get the starting values.
 ```{r e}
 start_vals <- 
   cdfdt %>%
-  # filter(yr != "8") %>%
+  filter(yr != "8") %>%
   nlsList(cums ~ SSlogis(jday, Asym, xmid, scal) | yr,
           data = .)
 # broom::tidy(start_vals)
@@ -228,6 +228,7 @@ start_vals <-
 
 
 ```{r init_vals, out.width="100%", out.height=5}
+start_vals
 
 start_vals %>%
   intervals %>%
@@ -285,6 +286,17 @@ ggplot() +
 
 
 
+```{r}
+cdfdt_pred %>% 
+  mutate(lab =paste0(year," (",yr,")")) %>% 
+  group_by(lab) %>%
+  summarise(year = unique(lab)) %>% 
+  ungroup() %>% 
+  select(year) %>% 
+  bind_cols(coef(w1)) %>% 
+  write_csv(here::here("out" , "paramter_est_per_year.csv"))
+
+```
 
 
 
