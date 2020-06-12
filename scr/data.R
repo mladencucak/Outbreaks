@@ -119,7 +119,7 @@ w1 <-
        start = start.vals)
 
 
-
+#Estimate the inital parameters of the model
 start_vals <- 
   cdfdt %>%
   filter(yr != "8") %>%
@@ -130,16 +130,20 @@ start_vals %>%
   intervals %>%
   plot
 
+# Fit on lnear model with logistic fuction
 w1 <- 
   cdfdt %>%
-  # filter(yr != "8") %>%
-  nlme(cums ~ SSlogis(jday, Asym, xmid, scal),
+  filter(yr != "8") %>%
+  nlme(cums ~ SSlogis(jday, Asym, xmid, scal),# model evaluates the logistic function and its gradient
        fixed = list(Asym ~ 1,
                     xmid ~ 1,
-                    scal ~ 1),
+                    scal ~ 1),#Fixed effects of the 
+       #random parameters of the model grouped by  year
+       #to reduce the number of parameters, the scale and it was excluded because it does not impact the model fit
        random = Asym + xmid  ~ 1 | yr,
        data = .,
-       start = fixef(start_vals))
+       start = fixef(start_vals)#Start parameters for the optimisation alghorithm
+       )
 
 pairs(w1)
 

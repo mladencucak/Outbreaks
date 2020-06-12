@@ -6,7 +6,7 @@ output: word_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ## Libraries
@@ -60,7 +60,9 @@ if (any(as.numeric(packages_load) == 0)) {
 rm(packages_load, list.of.packages, new.packages)
 
 ```
-##Background
+
+## Background 
+
 I guess the whole idea about this is related to some of my PhD projects that I could not finish. I had a pile of yearbooks with initial disease outbreaks and follow-up assessments from early 1950s to late 1990s. The thickness of these yearbooks was slimmer and slimmer towards end of the last century, hence, beside the historical and theoretical value they would not be of much use for my current project. I have given up on digitising them, because both myself and few of my students started hating me, because they are really messy.  
 (Very relevant paper by Zwankhuizen & Zadoks)[https://bsppjournals.onlinelibrary.wiley.com/doi/full/10.1046/j.1365-3059.2002.00738.x], which I think I have mentioned to Neil.  
 The main idea related to the current data set is that it is a bit more relevant to current agrosystem. It might be interesting to see how the initial outbreaks, their distribution, rate of increase, etc., is changes over years. This is a observational "study" and comes with all its caveats. These are reports by blight scouts, and it is hard to know if some scouts are more active than others, and similar variables. However, this data is collected by Louise Cooke, and I am sure she would be happy to answer any queries, if it comes to that.  
@@ -166,6 +168,7 @@ The entire data set can be seen [here](https://github.com/mladencucak/Outbreaks/
 ![unsuccesfull map](map.png) `
 
 ## Model fitting
+### Prepare the data
 ```{r}
 
 ```
@@ -188,16 +191,19 @@ outbreaks[outbreaks$Location!= "Oak Park",] %>%
   mutate(cums = cumsum(count)) %>% 
   dplyr::select(.,yr, jday, cums) %>% 
   ungroup() %>% 
-  mutate(yr = as.factor(yr-min(yr-1)))
+  mutate(year = yr,
+         yr = as.factor(yr-min(yr-1)))
 
 pander::pander(cdfdt[1:20,])
 ```
 
 
 ```{r}
-ggplot(cdfdt) +
+cdfdt %>% 
+mutate(lab =paste0(year," (",yr,")")) %>% 
+ggplot() +
   geom_line(aes(jday, cums))+
-  facet_wrap(~ yr, ncol = 3)+
+  facet_wrap(~ lab, ncol = 3)+
   labs(y = "Cumulative sum of outbreaks",
        x = "Date") +
   theme_article()+
@@ -206,6 +212,8 @@ ggsave(here::here("out", "Cumsum of outbreaks per year.png"),
        height = 4.5,
        dpi = 620)
 ```
+
+### Fit the model
 
 Get the starting values. 
 ```{r e}
@@ -232,20 +240,20 @@ pairs(start_vals, id = 0.1)
 Logistic fit with julian day as predictor and year as random grouping variable. 
 
 ```{r pairs_plot, out.width="100%"}
+# Fit on lnear model with logistic fuction
 w1 <- 
   cdfdt %>%
-  # filter(yr != "8") %>%
-  nlme(cums ~ SSlogis(jday, Asym, xmid, scal),
+  filter(yr != "8") %>%
+  nlme(cums ~ SSlogis(jday, Asym, xmid, scal),# model evaluates the logistic function and its gradient
        fixed = list(Asym ~ 1,
                     xmid ~ 1,
-                    scal ~ 1),
-       random = Asym + xmid ~ 1 | yr,
+                    scal ~ 1),#Fixed effects of the 
+       #random parameters of the model grouped by  year
+       #to reduce the number of parameters, the scale and it was excluded because it does not impact the model fit
+       random = Asym + xmid  ~ 1 | yr,
        data = .,
-       start = fixef(start_vals))
- summary(w1)
- plot(w1)
- qqnorm( w1, abline = c(0,1) )
- intervals( w1, which = "var-cov" )
+       start = fixef(start_vals)#Start parameters for the optimisation alghorithm
+       )
 
 ```
 
@@ -254,7 +262,7 @@ Calculate the predictions.
 ```{r}
 cdfdt_pred <- 
   cdfdt %>%
-  # filter(yr != "8") %>%
+  filter(yr != "8") %>%
   mutate(pred = predict(w1))
 
 
@@ -263,9 +271,11 @@ cdfdt_pred <-
 
 Plot predicted values. 
 ```{r}
-ggplot(cdfdt_pred) +
+cdfdt_pred %>% 
+  mutate(lab =paste0(year," (",yr,")")) %>% 
+ggplot() +
   geom_line(aes(jday, cums))+
-  facet_wrap(~ yr, ncol = 3)+
+  facet_wrap(~ lab, ncol = 3)+
   labs(y = "Cumulative sum of outbreaks",
        x = "Date") +
   theme_article() +
