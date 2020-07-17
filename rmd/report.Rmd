@@ -31,7 +31,9 @@ list.of.packages <-
     "maps",
     "ggrepel",
     "sf",
-    "ggspatial"
+    "ggspatial",
+    "factoextra", 
+    "NbClust"
   )
 
 new.packages <-
@@ -285,8 +287,9 @@ ggplot() +
 ```
 
 
-
+Extract parameter values.
 ```{r}
+params <- 
 cdfdt_pred %>% 
   mutate(lab =paste0(year," (",yr,")")) %>% 
   group_by(lab) %>%
@@ -295,10 +298,97 @@ cdfdt_pred %>%
   select(year) %>% 
   bind_cols(coef(w1)) %>% 
   write_csv(here::here("out" , "paramter_est_per_year.csv"))
-
 ```
 
 
+## Clustering 
+Aplication of any method is limited due to low number of data points.  
 
+### Estimate optimum number of clusters  
+althoug there are numerous methods to hel determining the number of clusters, in the end it is 
+a subjective decision.
+```{r}
+# Elbow method
+#Minimising the toal sum of squares
+# choose a number of clusters so that adding another cluster doesn’t improve much better the total WSS
+fviz_nbclust(params[, 2:4], kmeans, method = "wss") +
+  labs(subtitle = "Elbow method:The location of a bend (knee) in the\n plot is generally considered as an indicator of the appropriate number of clusters.")
+
+# Silhouette method
+# it measures the quality of a clustering.
+# That is, it determines how well each object lies within its cluster. 
+# A high average silhouette width indicates a good clustering.
+fviz_nbclust(params[, 2:4], kmeans, method = "silhouette")+
+  labs(subtitle = "Silhouette method")
+
+```
+
+According to these results and our subjective feeling,
+it is possible to define k = 3 as the optimum number of clusters in the data.
+
+```{r}
+#Seeds allow you to create a starting point for randomly generated numbers, 
+#so that each time your code is run, the same answer is generated
+set.seed(20)
+clusters <-
+kmeans(params[, 2:4],3, nstart = 20)
+
+#number of points in each cluster
+clusters$size
+#vector of within-cluster sum of squares, one component per cluster.
+clusters$withinss
+clusters$tot.withinss # total within-cluster sum of squares
+
+params$group <- as.factor(clusters$cluster)
+
+```
+
+Plot the observed and predicted curves and the cluster they are assigned to.  
+```{r plot_clusters, fig.height=7, fig.width=7}
+cdfdt_pred %>% 
+  mutate(year =paste0(year," (",yr,")")) %>% 
+  left_join(., params[, c("group", "year")]) %>% 
+  mutate(group = paste0("cl ",as.character(group) )) %>% 
+ggplot() +
+  geom_line(aes(jday, cums))+
+  geom_label(aes(x = 150, y=40,label = group))+
+  facet_wrap(group ~ year, ncol = 3)+
+  labs(y = "Cumulative sum of outbreaks",
+       x = "Date") +
+  theme_article() +
+  geom_line(aes(jday, pred), col = 2)
+
+```
+
+### Dendograms
+Create dendogram. 
+```{r}
+res.dist <- dist(params[, 2:4], method = "euclidean")
+
+as.matrix(res.dist)[1:6, 1:6]
+res.hc <- hclust(d = res.dist, method = "ward.D2")
+
+# cex: label size
+library("factoextra")
+fviz_dend(res.hc, cex = 1)
+
+# Compute cophentic distance
+res.coph <- cophenetic(res.hc)
+
+# Correlation between cophenetic distance and
+# the original distance
+cor(res.dist, res.coph)
+
+res.hc2 <- hclust(res.dist, method = "average")
+
+cor(res.dist, cophenetic(res.hc2))
+
+# Cut tree into 4 groups
+grp <- cutree(res.hc, k = 4)
+head(grp, n = 4)
+# Number of members in each cluster
+table(grp)
+
+```
 
 

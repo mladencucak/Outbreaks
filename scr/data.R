@@ -149,7 +149,7 @@ pairs(w1)
 
 cdfdt_pred <- 
   cdfdt %>%
-  # filter(yr != "8") %>%
+  filter(yr != "8") %>%
   mutate(pred = predict(w1))
 
 ggplot(cdfdt_pred) +
@@ -160,5 +160,94 @@ ggplot(cdfdt_pred) +
   theme_article() +
   geom_line(aes(jday, pred), col = 2)
 
+
+params <- 
+cdfdt_pred %>% 
+  mutate(lab =paste0(year," (",yr,")")) %>% 
+  group_by(lab) %>%
+  summarise(year = unique(lab)) %>% 
+  ungroup() %>% 
+  select(year) %>% 
+  bind_cols(coef(w1)) %>% 
+  write_csv(here::here("out" , "paramter_est_per_year.csv"))
+
+
+clusters <-
+kmeans(params[, 2:4],3)
+
+params$group <- as.factor(clusters$cluster)
+
+cdfdt_pred %>% 
+  mutate(year =paste0(year," (",yr,")")) %>% 
+  left_join(., params[, c("group", "year")]) %>% 
+  ggplot() +
+  geom_line(aes(jday, cums))+
+  geom_label(aes(x = 150, y=20,label = group))+
+  facet_grid(year~group )+
+  labs(y = "Cumulative sum of outbreaks",
+       x = "Date") +
+  theme_article() +
+  geom_line(aes(jday, pred), col = 2)
+
+
+
+# browseURL("https://www.datanovia.com/en/lessons/determining-the-optimal-number-of-clusters-3-must-know-methods/")
+pkgs <- c("factoextra",  "NbClust")
+install.packages(pkgs)
+library(factoextra)
+library(NbClust)
+
+
+
+# Elbow method
+#Minimising the toal sum of squares
+# choose a number of clusters so that adding another cluster doesn’t improve much better the total WSS
+fviz_nbclust(params[, 2:4], kmeans, method = "wss") +
+  labs(subtitle = "Elbow method:The location of a bend (knee) in the\n plot is generally considered as an indicator of the appropriate number of clusters.")
+
+# Silhouette method
+# it measures the quality of a clustering.
+# That is, it determines how well each object lies within its cluster. 
+# A high average silhouette width indicates a good clustering.
+fviz_nbclust(params[, 2:4], kmeans, method = "silhouette")+
+  labs(subtitle = "Silhouette method")
+
+# According to these observations, it’s possible to define k = 4 as the optimal number of clusters in the data.
+
+# Gap statistic
+# nboot = 50 to keep the function speedy. 
+# recommended value: nboot= 500 for your analysis.
+# Use verbose = FALSE to hide computing progression.
+set.seed(123)
+fviz_nbclust(params[, 2:4], kmeans, nstart = 25,  method = "gap_stat", nboot = 500)+
+  labs(subtitle = "Gap statistic method")
+
+
+
+NbClust(data = params[, 2:4], diss = NULL, distance = "euclidean",
+        min.nc = 2, max.nc = 15, method = "kmeans")
+NbClust(data = params[, 2:4], diss = NULL, distance = "euclidean",
+        min.nc = 2, max.nc = 3, method = "average")
+
+
+rownames(df)[grp == 1]
+
+# browseURL("https://www.datanovia.com/en/lessons/agglomerative-hierarchical-clustering/")
+library("cluster")
+# Agglomerative Nesting (Hierarchical Clustering)
+res.agnes <- agnes(x = params[, 2:4], # data matrix
+                   stand = TRUE, # Standardize the data
+                   metric = "euclidean", # metric for distance matrix
+                   method = "ward" # Linkage method
+)
+
+# DIvisive ANAlysis Clustering
+res.diana <- diana(x = params[, 2:4], # data matrix
+                   stand = TRUE, # standardize the data
+                   metric = "euclidean" # metric for distance matrix
+)
+
+fviz_dend(res.agnes, cex = 0.6, k = 4)
+fviz_dend(res.diana, cex = 0.6, k = 4)
 
 

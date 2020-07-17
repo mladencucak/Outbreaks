@@ -1,0 +1,19 @@
+
+  model {
+    ## Initialising
+    mu[1] <- Y[1]
+
+    ## Likelihood
+    for(t in 2:N) {
+      Y[t] ~ dnegbin(p[t], theta)
+      Y_pred[t] ~ dnegbin(p[t], theta)
+      p[t] <- theta/(theta + mu[t])
+      log(mu[t]) <- phi[1] + phi[2] * Y[t-1]
+    }
+    
+    ## Priors
+    for(i in 1:2) {
+      phi[i] ~ dnorm(0, 0.001)
+    }
+    theta ~ dgamma(0.001, 0.001)
+  }

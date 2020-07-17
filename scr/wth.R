@@ -1,14 +1,12 @@
 
 ########################################################
-#Data
+# Libraries
 ########################################################
 list.of.packages <-
   c(
     "tidyverse",
     "readxl",
-    "broom", 
     "data.table",
-    "minpack.lm",
     "knitr",
     "zoo",
     "egg",
@@ -28,9 +26,6 @@ if (length(new.packages))
 if (length(new.packages))
   install.packages(new.packages, repos = c(CRAN="https://cran.r-project.org/"))
 
-
-if ("reconPlots" %in% installed.packages() == FALSE) devtools::install_github("andrewheiss/reconPlots")
-
 packages_load <-
   lapply(list.of.packages, require, character.only = TRUE)
 
@@ -47,18 +42,26 @@ rm(packages_load, list.of.packages, new.packages)
 ################################################333
 #Load data
 #####################################################
-########################################################
-#Filter data sets with low number of missing values
-########################################################
 
 load(here::here("dat", "wth.Rdata"))
-# save( wth,file = here::here("dat", "wth.Rdata"))
+
+weather <- 
+  weather[weather$country == "NI",]
+
+unique(weather$stna)
+
+
+wth <-  filter(weather, year>=2002)
+wth <-  filter(wth, year<=2017)
 
 # Filter wth data we will use in  to estimate treatment frequencies 
 wth <- 
-  wth[ , c("date_time","short_date", "id", "year","month","doy","day","hour","stno","temp","dewpt","wetb", "rhum",
-           "rain", "stna", "lat", "long"  , "sol_rad","height", "sol_nasa")]
+  wth[ , c("date_time","short_date",  "year","month","doy","day","hour","stno","temp", "rhum",
+           "q10cm_soil_temp",
+           "rain", "stna", "lat", "long", "sol_nasa")]
 
+unique(wth$stna)
+unique(wth$year) %>% sort()
 
 nrow(wth)
 wth <- unite(wth, id, c("stna", "year"), remove = FALSE)
@@ -69,11 +72,6 @@ wth_ls <- wth_ls[as.vector(not_empty, mode = "logical")]; rm(not_empty)
 length(wth_ls)
 
 for(x in seq_along(wth_ls)){
-  # x <- 1
-  # x <- "Roches Point.2018"
-  # x <- "Roches Point.2007"
-  # x <- "Roches Point.2001"
-  # x <- "Roches Point.2001"
   df <- wth_ls[[x]]
   #sort problems with the dates
   df <- arrange(df, date_time)
@@ -92,99 +90,154 @@ for(x in seq_along(wth_ls)){
   print(paste(x, "of" ,length(wth_ls)))
 }
 
-# Check stations which were erected during the period of interest
+
+
 for (i in seq(wth_ls)) {
   wth_ls[[i]] -> x
   if(x$hour[1:24] != c(0:23)){print(x$id[1])}
 }
 
-# #Remove the data that doesnt contaill all the dates because the staion was closed/oppened 
-# datetimes <-  strptime(c("30.04", "16.09"), format = "%d.%m")
-# no_of_days <- difftime(datetimes[2], datetimes[1], units = "days")+1
-# wth_ls <-  wth_ls[sapply(wth_ls, function(x) length(unique(x$doy))==no_of_days)] #no of days
-# wth_ls <-  wth_ls[sapply(wth_ls, function(x) nrow(x)==c(no_of_days*24))] #no of hours
 
-#Remove data with more than  1% of missing values
-
-
-sapply(wth_ls, function(x) sum(is.na(x[,c( "temp", "rhum")])))%>% as.vector()
-nas <- sapply(wth_ls, function(x) mean(is.na(x[,c( "temp", "rhum")])))%>% as.vector() %>% round(3)
-sum(nas<0.05)
-wth_ls <- wth_ls[nas<0.05]
-
-length(wth_ls)
-
-sapply(wth_ls, function(x) nrow(x)) %>% as.numeric()
-# all(sapply(wth_ls, function(x) nrow(x)) %>% as.numeric()) 
-wth_ls <- lapply(wth_ls, function(x) x[!duplicated(x),])
-sapply(wth_ls, function(x) nrow(x)) %>% as.numeric() 
-
+# Check stations which were erected during the period of interest
 wth <- bind_rows(wth_ls)
+wth$sol_nasa[is.na(wth$sol_nasa)] <- 0
+wth$date <- wth$short_date
+wth$short_date <- NULL
 
-
-
-
-
-
-
-
-# # Select Stations
-# stations <- c(
-#   "Katesbridge",
-#   "Aldergrove",
-#   "Ballykelly",
-#   "Magilligan No 2",
-#   "Castlederg",
-#   "Derrylin",
-#   "Derrylin Cornahoule",
-#   "Ballywatticock"
-# )
+# # TODO # Check if some removal of data is necessary
+# todor::todor("dd")
+# #Remove data with more than  1% of missing values
+# wth_ls <- split(wth,  wth$stna )
+# sapply(wth_ls, function(x) sum(is.na(x[,c( "temp", "rhum")])))%>% as.vector()
+# nas <- 
+#   sapply(wth_ls, function(x) mean(is.na(x[,c( "temp", "rhum")])))%>% as.vector() %>% round(3)
+# sum(nas<0.1)
+# wth_ls <- wth_ls[nas<0.05]
 # 
-# length(unique(wth$stna))
-# 
-# glimpse(wth)
-# 
-# #Remove stations whihc are not a part of the analysis
-# wth <- filter(wth,stna %in% stations)
+# length(wth_ls)
 
-#The number of station/years
-unique(wth$id) %>% length()
+summary(wth)
+wth <- 
+wth %>% 
+  mutate(rh = ifelse(rhum<0, NA, rhum)) %>% 
+  filter(rain<30) %>% 
+  rename(soilt =q10cm_soil_temp) %>% 
+  select(-rhum)
 
-wth_ls <- split(wth, wth$id)
+summary(wth)
+
+  
+  
+########################################################
+#Stations selected for the analysis
+########################################################
+
+#Visualisation
+low_na <- 0.01
+na_prop <- 0.1
+
+ni <- 
+  wth %>% 
+  group_by( stna, year)  %>% 
+  dplyr::summarize(sum_NA = round(mean(is.na(c(temp,rh, rain))),2)) 
+
+#reduce the size of data by removing the metadata
+wth <-
+  wth%>%
+  select(-c(stno,lat, lon, elev, open, closed))
 
 
-sapply(wth_ls, function(x) mean(is.na(x[,c( "temp", "rhum")])))%>% 
-  as.vector() %>% round(3) %>% sort()
+
+ni$line_positions_y <-
+  c(
+    uniq_stna <- seq(.5, length(unique(ni$stna)), 1), rep(1.5, nrow(ni) - length(seq(1.5, length(unique(ni$stna)),1)))
+    )
+
+# p1 <-
+ni %>% 
+  mutate(perc_missing =  ifelse(sum_NA < low_na, paste("<", low_na), paste( low_na, "-", na_prop))) %>% 
+  mutate(perc_missing = factor(perc_missing)) %>% 
+  # mutate(line_positions_x = year + .5 ) %>% 
+  ggplot(., aes(year, stna))+
+  geom_tile(aes(fill = perc_missing), alpha=0.5 )+
+  scale_x_continuous(breaks = (seq(2000, 2018, 2)))+
+  # geom_vline(aes(xintercept = line_positions_x),
+  #            color = "darkgray",
+  #            size  = .2,
+  #            alpha = .6)+
+  # geom_hline(aes(yintercept = line_positions_y),
+  #            color = "darkgray",
+  #            size  = .2,
+  #            alpha = .8)+
+  theme_article()+
+  ggtitle("Data for the treatment evaluation")+
+  labs(x = "", y="",fill = "Proportion missing:")+
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        legend.position = "top", 
+        panel.grid = element_blank())+
+  # save the plot
+  ggsave(
+    file = here::here("out" , "station_years.png"),
+    width = 13,
+    height = 15.5,
+    units = "cm",
+    dpi = 320
+  )
+
+wth %>% 
+  ggplot()+
+  geom_histogram(aes(rh),bins = 50)+
+  # scale_x_continuous(limits = c(50,100))+
+  facet_wrap(~stna)
+
+wth %>% 
+  mutate(rain = ifelse(rain>0, rain, NA)) %>% 
+  ggplot()+
+  geom_histogram(aes(rain),bins = 50)+
+  # scale_x_continuous(limits = c(50,100))+
+  facet_wrap(~stna)
+
+wth %>% 
+  # mutate(rain = ifelse(rain>0, rain, NA)) %>% 
+  ggplot()+
+  geom_histogram(aes(temp),bins = 50)+
+  # scale_x_continuous(limits = c(50,100))+
+  facet_wrap(~stna)
 
 
 
-# Total number of stations 
-unique(wth$stna) %>% length()
-
-#length
-unique(wth$id) %>% length()
 
 
-# Total number of year/stations 
-lapply(wth_ls, function(x) length(unique(x$year))) %>% 
-  bind_cols() %>% t() %>% sum()
+########################################################
+#Explore NAs
+########################################################
 
-#Weaher data avialability per year
-# lapply(wth_ls, function(x) {
-#   years <-  unique(x$year)
-#   stna <- rep(unique(x$stna), length(years))
-#   country <-  rep(unique(x$country), length((years)))
-#   data.frame(stna = stna,years = years, country = country)
-# }) %>% 
-#   bind_rows() %>%
-#   group_by(country) %>% 
-#   ggplot() + 
-#   ggridges::geom_ridgeline(aes(x=years,y=as.factor(stna),fill = country,height = 0.4),stat="identity")+
-#   scale_y_discrete(name = "Station Name")+
-#   ggtitle("wth Data For The Treatment Evaluation")+
-#   ggridges:: theme_ridges(center = TRUE, font_size = 10)
 
-wth <- bind_rows(wth_ls)
+library("naniar")
+
+# gg_miss_upset(wth)
+# gg_miss_var(wth,facet = stna)
+# gg_miss_var(select(wth, -c(airp,wspd)),facet = stna)
+
+gg_miss_fct(x = ., fct = stna)
+
+wth <- 
+  wth %>% 
+  filter(stna != "Belfast Harbour No 2")
+
+wth %>% 
+  mutate(mon = lubridate::month(date_time)) %>% 
+  # dplyr::filter(mon %in% c(9:12,1:5)) %>% 
+  select(., c( temp, rh, sol_nasa, rain, stna,soilt)) %>% 
+  gg_miss_fct(x = ., fct = stna)
+
+
+
+save(wth, file= here::here("dat", "data_for_analysis.Rdata"))
+# load( file= here::here("dat", "treatment_no_estim.Rdata"))
+
 
 ########################################################
 #Map stations
@@ -358,60 +411,100 @@ shell.exec(here::here("out" , "map_points.png"))
 #   )
 # 
 
-########################################################
-#Stations selected for the treatment analysis
-########################################################
-
-#Visualisation
-low_na <- 0.01
-na_prop <- 0.1
-
-ni <- 
-  wth %>% 
-  group_by( stna, year)  %>% 
-  dplyr::summarize(sum_NA = round(mean(is.na(c(temp,rhum, rain))),2)) 
+########################################################################
+# Weather data summaries
+#########################################################################
 
 
-ni$line_positions_y <-
-  c(uniq_stna <- seq(.5, length(unique(ni$stna)), 1),
-    rep(1.5, nrow(ni) - length(seq(
-      1.5, length(unique(ni$stna)), 1
-    ))))
-
-# p1 <-
-  ni %>% 
-  mutate(perc_missing =  ifelse(sum_NA < low_na, paste("<", low_na), paste( low_na, "-", na_prop))) %>% 
-  mutate(perc_missing = factor(perc_missing)) %>% 
-  mutate(line_positions_x = year + .5 ) %>% 
-  ggplot(., aes(year, stna))+
-  geom_tile(aes(fill = perc_missing), alpha=0.5 )+
-  scale_x_continuous(breaks = (seq(2000, 2018, 2)))+
-  geom_vline(aes(xintercept = line_positions_x),
-             color = "darkgray",
-             size  = .2,
-             alpha = .6)+
-  # geom_hline(aes(yintercept = line_positions_y),
-  #            color = "darkgray",
-  #            size  = .2,
-  #            alpha = .8)+
-  theme_article()+
-  ggtitle("Data for the treatment evaluation")+
-  labs(x = "", y="",fill = "Proportion missing:")+
-  theme(axis.title.x=element_blank(),
-        axis.text.x=element_blank(),
-        axis.ticks.x=element_blank(),
-        legend.position = "top", 
-        panel.grid = element_blank())
-
-wth %>% 
-  mutate(rhum = ifelse(rhum<0, NA, rhum)) %>% 
+library(data.table)
+setDT(wth)[, list(meantemp = mean(temp, na.rm = TRUE)), 
+          by = list(stno, year)] %>% 
   ggplot()+
-  geom_histogram(aes(rhum),bins = 50)+
-  scale_x_continuous(limits = c(50,100))+
-  facet_wrap(~stna)
+    geom_line(aes(year, meantemp, color = factor(stno)))
 
 
 
-save(wth_ls, file= here::here("dat", "treatment_no_estim.Rdata"))
-# load( file= here::here("dat", "treatment_no_estim.Rdata"))
+
+
+
+
+
+library(xts)
+library(hydroTSM)
+
+# Generate random data
+set.seed(2018)
+date = seq(from = as.Date("2016-01-01"), to = as.Date("2018-12-31"),
+           by = "days")
+temperature = runif(length(date), -15, 35)
+dat <- data.frame(date, temperature)
+
+# Convert to xts object for xts & hydroTSM functions
+dat_xts <- xts(dat[, -1], order.by = dat$date)
+
+# All daily, monthly & annual series in one plot
+hydroplot(dat_xts, pfreq = "dma", var.type = "Temperature")
+
+# Weekly average
+dat_weekly <- apply.weekly(dat_xts, FUN = mean)
+plot(dat_weekly)
+
+# Monthly average
+dat_monthly <- daily2monthly(dat_xts, FUN = mean, na.rm = TRUE)
+plot.zoo(dat_monthly, xaxt = "n", xlab = "")
+axis.Date(1, at = pretty(index(dat_monthly)),
+          labels = format(pretty(index(dat_monthly)), format = "%b-%Y"),
+          las = 1, cex.axis = 1.1)
+
+
+# Seasonal average: need to specify the months
+dat_seasonal <- dm2seasonal(dat_xts, season = "DJF", FUN = mean, 
+                            na.rm = TRUE)
+plot(dat_seasonal)
+
+
+
+
+
+
+
+
+head(wth)
+
+library(xts)
+
+wthxts <- 
+  wth[ ,!colnames(wth) %in% 
+         c("short_date", "id","year", "month", "doy", "day",  "hour", "stna", "country")] 
+
+wthxts <- 
+xts(wthxts[ , !colnames(wthxts) %in% c("date_time")],order.by = wthxts$date_time)
+
+str(wthxts)
+wthxts <- split(wthxts, wthxts$stno)
+
+
+for (i in seq(wthxts)) {
+  #i=1
+dff <- wthxts[[i]]
+  periodicity(dff)
+
+  temps_weekly <- split(, f = "day")
+
+
+# Create a list of weekly means, temps_avg, and print this list
+temps_avg <- 
+  
+  lapply(X = temps_weekly, FUN = mean)
+temps_avg
+}
+
+
+
+# Round observations in z to the next hour
+z_round <- align.time(z, n = 3600)
+
+
+
+
 
