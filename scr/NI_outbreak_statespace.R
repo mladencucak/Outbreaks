@@ -5,11 +5,15 @@ library(MCMCvis)
 library(runjags)
 library(gridExtra)
 
-blightdat <- read.csv("PLB Outbreaks no oakpark.csv", header = TRUE)
+blightdat<-read.csv(here::here("tmp" , "PLB Outbreaks no oakpark.csv") , head=TRUE)
 
-n_days <- blightdat %>%
+n_days <- 
+  blightdat %>%
   group_by(yr) %>%
-  summarise(n = n())
+  summarise(n = n()) %>% 
+  mutate(cov = rnorm(12))
+
+n_days[ 12, 2:3] <-NA
 
 n_days %>%
   ggplot(aes(x = yr, y = n)) +
@@ -19,8 +23,12 @@ n_days %>%
   scale_x_continuous(breaks = 2003:2014,
                      labels = paste(2003:2014))
 
-n_days <- rbind(n_days, NA, NA, NA)
-n_days$yr <- 2003:2017
+# n_days <- rbind(n_days, NA, NA, NA)
+# n_days$yr <- 2003:2017
+# 
+# n_days$full_n <- n_days$n
+# 
+# n_days[ 10:12, "n"] <-NA 
 
 ## JAGS model
 model <- "model.txt"
@@ -34,13 +42,14 @@ jagsscript <- cat("
       Y[t] ~ dnegbin(p[t], theta)
       Y_pred[t] ~ dnegbin(p[t], theta)
       p[t] <- theta/(theta + mu[t])
-      log(mu[t]) <- phi[1] + phi[2] * Y[t-1]
+      log(mu[t]) <- phi[1] + phi[2] * Y[t-1] + beta* cov[t-1]
     }
     
     ## Priors
     for(i in 1:2) {
       phi[i] ~ dnorm(0, 0.001)
     }
+    beta ~ dnorm(0, 0.001)
     theta ~ dgamma(0.001, 0.001)
   }
 ", file = model)
@@ -62,10 +71,12 @@ initfunction <- function(chain) {
 
 # JAGS data
 jags_data <- list("Y" = n_days$n,
-                  "N" = nrow(n_days))
+                  "N" = nrow(n_days),
+                  "cov" = n_days$cov
+                  )
 
 # parameters to be monitored
-jags_params <- c("phi","theta","mu","Y_pred")
+jags_params <- c("phi","beta", "theta","mu", "Y_pred")
 
 # run parallel JAGS
 nChains <- 3
@@ -102,10 +113,11 @@ n_days <- n_days %>%
 
 n_days %>%
   ggplot(aes(x = yr, y = n)) +
+  geom_point(aes(x = yr, y = full_n), color = "red")+
   theme_bw() +
   geom_point() +
   geom_line(alpha = .4) +
-  geom_line(aes(y = pred), col = 4) +
+  geom_line(aes(y = pred), col = "blue") +
   geom_ribbon(aes(ymin = lower, ymax = upper), alpha = .2, fill = 4) +
   scale_x_continuous(breaks = 2003:2017,
                      labels = paste(2003:2017))

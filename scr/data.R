@@ -59,6 +59,14 @@ str(outbreaks)
 
 outbreaks$jday <- as.Date(outbreaks$date,format="%m/%d/%Y") %>% yday()
 
+outbreaks[outbreaks$Location!= "Oak Park",] %>%
+  group_by(yr) %>% 
+  summarise(initrep = min(date),
+            lastrep = max(date),
+            inidoy = min(jday),
+            lastdoy  = max(jday),
+            sumrep = n()) %>% 
+  write_csv(here::here("dat", "reports_summary.csv"))
 
 cdfdt <- 
   outbreaks[outbreaks$Location!= "Oak Park",] %>%
@@ -75,7 +83,8 @@ cdfdt <-
   mutate(cums = cumsum(count)) %>% 
   dplyr::select(.,yr, jday, cums) %>% 
   ungroup() %>% 
-  mutate(yr = as.factor(yr-min(yr-1)))
+  mutate(yr = as.factor(yr-min(yr-1)))%>% 
+  write_csv(here::here("dat", "reports_per_yday.csv"))
 
 str(cdfdt)
 
