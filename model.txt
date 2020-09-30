@@ -5,8 +5,8 @@
 
     ## Likelihood
     for(t in 2:N) {
-      Y[t] ~ gamma(p[t], theta)
-      Y_pred[t] ~ gamma(p[t], theta)
+      Y[t] ~ dnegbin(p[t], theta)
+      Y_pred[t] ~ dnegbin(p[t], theta)
       p[t] <- theta/(theta + mu[t])
         log(mu[t]) <- phi[1] + phi[2] * Y[t-1]
     }

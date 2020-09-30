@@ -206,21 +206,23 @@ runJagsOut <- run.jags(method = "parallel",
 coda_samples <- as.mcmc.list(runJagsOut)
 
 # parameter estimates
-estimates <- MCMCsummary(coda_samples, round = 4)
+estimates <- MCMCsummary(coda_samples, round = 3)
 estimates
 
 # predictions
-Y_pred <- MCMCsummary(coda_samples, params = "Y_pred")
+Y_pred_base <- MCMCsummary(coda_samples, params = "Y_pred")
 
 
-
+preddf_base <- 
 dta %>%
   dplyr::select(c("yr", "sumrep")) %>%
   mutate(
+    covar = "base",
     pred = c(NA, Y_pred$mean),
     lower = c(NA, Y_pred$`2.5%`),
     upper = c(NA, Y_pred$`97.5%`)
-  ) %>%
+  ) 
+preddf_base %>%
   ggplot(aes(x = yr, y = sumrep)) +
   geom_point(aes(x = yr, y = sumrep), color = "red") +
   theme_bw() +
@@ -232,11 +234,15 @@ dta %>%
               fill = 4) +
   scale_x_continuous(breaks = 2003:2017,
                      labels = paste(2003:2017))+
+  
 ggsave(here::here("out", "base_model_diag", "base_model.png"))
 
 
-MCMCsummary(coda_samples, c("phi", "theta"), round = 4) %>%
-  bind_rows %>% write.csv(here::here("out", "base_model_diag", "diag.csv"))
+param_est <- 
+MCMCsummary(coda_samples, c("phi", "theta"), round = 2) %>%
+  bind_rows 
+
+write.csv(param_est,here::here("out", "base_model_diag", "diag.csv"))
 
 
 # parameter estimates
@@ -354,7 +360,13 @@ for(i in seq(colnames(cov_df))) {
   names(mods_ls)[i] <- cov_name
 }
 
+# save(mods_ls, file =  here::here("out", "model_runs_with_covs.Rdata"))
+load(file =  here::here("out", "model_runs_with_covs.Rdata"))
+
+
+
 #Diagnostics
+par_ls <- list()
 posterior_ls <- list()
 pls <- list()
 
@@ -370,8 +382,8 @@ for(i in seq(names(mods_ls))) {
   # parameter estimates
   posterior <- as.matrix(coda_samples[,c(1:3)])
   posterior_ls[[i]] <- 
-  bind_cols(rownames( MCMCsummary(coda_samples, c("phi","beta", "theta"), round = 4)) %>% tbl_df(),
-            MCMCsummary(coda_samples, c("phi","beta", "theta"), round = 4))  
+  bind_cols(rownames( MCMCsummary(coda_samples, c("phi","beta", "theta"), round = 3)) %>% tbl_df(),
+            MCMCsummary(coda_samples, c("phi","beta", "theta"), round = 3))  
   
   posterior_ls[[i]] <-
   add_column(posterior_ls[[i]], cov = cov_name, .before = "value") %>% 
@@ -383,44 +395,126 @@ for(i in seq(names(mods_ls))) {
   fundf <-
     dta %>%
     dplyr::select(c("yr", "sumrep",cov_name)) %>%
+    mutate(covar = cov_name) %>% 
     mutate(pred = c(NA, Y_pred$mean),
            lower = c(NA, Y_pred$`2.5%`),
            upper = c(NA, Y_pred$`97.5%`))
+  
+  par_ls[[i]] <- fundf
 
-  fundf %>%
-    ggplot(aes(x = yr, y = sumrep)) +
-    geom_point(aes(x = yr, y = sumrep), color = "red")+
-    theme_bw() +
-    geom_point() +
-    geom_line(alpha = .4) +
-    geom_line(aes(y = pred), col = "blue") +
-    geom_ribbon(aes(ymin = lower, ymax = upper), alpha = .2, fill = 4) +
-    scale_x_continuous(breaks = 2003:2017,
-                       labels = paste(2003:2017))+
-    ggsave(here::here("out", "model_diag",paste0(cov_name, ".png")))
-  
-  pls [[i]]<- 
-  mcmc_areas(posterior[, c(3,3)], prob = .95)+
-    ggplot2::labs(subtitle =  cov_name)
-  
-  pl <- 
-  grid.arrange(mcmc_areas(posterior[, c(1,1)], prob = .95),
-               mcmc_areas(posterior[, c(2,2)], prob = .95),
-               mcmc_areas(posterior[, c(3,3)], prob = .95), 
-               ncol = 3) 
-    ggsave(
-      here::here("out", "model_diag", paste0("pars", cov_name, ".png")),
-      plot = pl,
-      width = 4,
-      height =2
-    )
-    rm(pl)
+  # fundf %>%
+  #   ggplot(aes(x = yr, y = sumrep)) +
+  #   geom_point(aes(x = yr, y = sumrep), color = "red")+
+  #   theme_bw() +
+  #   geom_point() +
+  #   geom_line(alpha = .4) +
+  #   geom_line(aes(y = pred), col = "blue") +
+  #   geom_ribbon(aes(ymin = lower, ymax = upper), alpha = .2, fill = 4) +
+  #   scale_x_continuous(breaks = 2003:2017,
+  #                      labels = paste(2003:2017))+
+  #   ggsave(here::here("out", "model_diag",paste0(cov_name, ".png")))
+  # 
+  # pls [[i]]<-
+  # mcmc_areas(posterior[, c(3,3)], prob = .95)+
+  #   ggplot2::labs(subtitle =  cov_name)
+  # 
+  # pl <-
+  # grid.arrange(mcmc_areas(posterior[, c(1,1)], prob = .95),
+  #              mcmc_areas(posterior[, c(2,2)], prob = .95),
+  #              mcmc_areas(posterior[, c(3,3)], prob = .95),
+  #              ncol = 3)
+  #   ggsave(
+  #     here::here("out", "model_diag", paste0("pars", cov_name, ".png")),
+  #     plot = pl,
+  #     width = 4,
+  #     height =2
+  #   )
+  #   rm(pl)
   
   # runJagsOut.mcmc <- as.mcmc(runJagsOut)
   # summary(runJagsOut.mcmc)
   # autocorr.plot(runJagsOut.mcmc)
   
 }
+
+postdf <- 
+posterior_ls %>% 
+  bind_rows(param_est,. ) %>% 
+  mutate(sig = ifelse(c(`2.5%`>0&`97.5%`>0)|c(`2.5%`<0&`97.5%`<0), "yes","no")) %>% 
+  filter(par == "beta"&sig == "yes")
+
+
+
+rsq <- function(x, y) summary(lm(y~x))$r.squared
+
+
+preddf <- 
+par_ls %>% 
+  bind_rows() %>% 
+  filter(covar %in% postdf$cov) %>% 
+  dplyr::select(colnames(preddf_base)) %>% 
+  bind_rows(preddf_base, .) %>% 
+  group_by(covar) %>% 
+  mutate(rsq = rsq(sumrep, pred) %>% round(2)) %>% 
+  ungroup
+
+
+
+preddf %>%
+  mutate(covar = ifelse(
+    covar == "inidoy",
+    "Covariate: DOY of 1st report",
+    ifelse(
+      covar == "base",
+      "Base model without covariets",
+      ifelse(
+        covar == "sol_rad",
+        "Covariate: Solar radiation during growing season",
+        ""
+      )
+    )
+  )) %>%
+  ggplot(aes(x = yr, y = sumrep)) +
+  geom_point(aes(x = yr, y = sumrep), color = "red") +
+  geom_point() +
+  geom_line(alpha = .4) +
+  geom_line(aes(y = pred, color = covar)) +
+  geom_ribbon(aes(ymin = lower, ymax = upper),
+              alpha = .2,
+              fill = 4) +
+  scale_x_continuous(breaks = 2003:2017,
+                     labels = paste(2003:2017)) +
+  labs(y = "Total number of reports",
+       x = "Year",
+       color = "Model:") +
+  geom_text(aes(
+    label = paste("R^2 ==", rsq),
+    y = 100,
+    x = max(yr) - .5
+  ),
+  size = 4,
+  parse = TRUE) +
+  facet_wrap( ~ covar, ncol = 1) +
+  guides(colour = guide_legend(
+    nrow = 2,
+    byrow = TRUE,
+    title.position = "top"
+  )) +
+  theme_bw() +
+  theme(legend.position = "top") +
+  
+  ggsave(
+    here::here("out", "best_models_fits.png"),
+    width = 6,
+    height = 8,
+    dpi = 320
+  )
+
+shell.exec(here::here("out", "best_models_fits.png"))
+
+posterior_ls %>%
+  bind_rows(param_est, .) %>%
+  write_csv(here::here("out", "diag.csv"))
 
 
 grid.arrange(grobs = pls,
@@ -456,6 +550,36 @@ cov_df <-
 # The last day of report from the previous year was modeled as predictor  
 cov_df$lastdoy <- 
 c(NA,head(cov_df$lastdoy, -1) )
+
+names(cov_df)
+
+# Conver to proportions
+
+
+model <- "model.txt"
+jagsscript <- cat("
+  model {
+    ## Initialising
+    mu[1] <- Y[1]
+    ## Likelihood
+    for(t in 2:N) {
+      Y[t] ~ dbeta(a[t], b[t])
+      Y_pred[t] ~ dbeta(a[t], b[t])
+      a[t] <- mu[t] * psi
+      b[t] <- (1 - mu[t]) * psi
+      logit(mu[t]) <- phi[1] + phi[2] * Y[t-1] + beta* cov[t]
+    }
+    
+    ## Priors
+    for(i in 1:2) {
+      phi[i] ~ dnorm(0, 0.001)
+    }
+    beta ~ dnorm(0, 0.001)
+    psi_inv ~ dgamma(0.01,0.01)
+    psi <- 1/psi_inv
+  }
+", file = model)
+
 
 for(i in seq(colnames(cov_df))) {
   # i = 1
@@ -504,8 +628,8 @@ for(i in seq(names(init_mods_ls))) {
   posterior <- as.matrix(coda_samples[,c(1:3)])
   posterior_ls[[i]] <- 
     
-    bind_cols(rownames( MCMCsummary(coda_samples, c("phi","beta", "theta"), round = 4)) %>% tbl_df(),
-              MCMCsummary(coda_samples, c("phi","beta", "theta"), round = 4))  
+    bind_cols(rownames( MCMCsummary(coda_samples, c("phi","beta", "psi"), round = 4)) %>% tbl_df(),
+              MCMCsummary(coda_samples, c("phi","beta", "psi"), round = 4))  
   
   posterior_ls[[i]] <-
     add_column(posterior_ls[[i]], cov = cov_name, .before = "value") %>% 

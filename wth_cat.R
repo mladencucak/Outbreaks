@@ -160,12 +160,14 @@ wthd <-
 head(wthd)
 tail(wthd)
 summary(wthd)
+wthd$yr <- year(wthd$date)
 
 save(wthd,file =  here::here("dat",  "wth_day.RData"))
 
-wthd$yr <- year(wthd$date)
 
 disdf <-  read_csv(here::here("dat", "reports_summary.csv"))
+
+
 
 # Create object for each season from august year 1 to september year 2
 
@@ -236,6 +238,7 @@ lapply(catls, function(dff){
       propfrost_ooi = sum(propfrost) # sum of mean frost day proportions   
     )%>% 
     bind_cols(y, .)
+  
   # Hellmann value, Σ average daily temperatures <0°C, November–March
   # a measure of the coldness of the winter  
   y <- 
